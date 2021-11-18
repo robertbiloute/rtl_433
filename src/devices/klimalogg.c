@@ -92,7 +92,7 @@ static int klimalogg_decode(r_device *decoder, bitbuffer_t *bitbuffer)
 
     /* clang-format off */
     data = data_make(
-            "model",            "",                 DATA_STRING, "Klimalogg Pro",
+            "model",            "",                 DATA_STRING, "Klimalogg-Pro",
             "id",               "Id",               DATA_FORMAT, "%04x", DATA_INT, id,
             "battery_ok",       "Battery",          DATA_INT,    !battery_low,
             "temperature_C",    "Temperature",      DATA_STRING, temperature_str,
