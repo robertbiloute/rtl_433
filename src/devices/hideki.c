@@ -49,6 +49,7 @@ static int hideki_ts04_callback(r_device *decoder, bitbuffer_t *bitbuffer)
 {
     data_t *data;
     uint8_t *b = bitbuffer->bb[0]; // TODO: handle the 3 row, need change in PULSE_CLOCK decoding
+
     uint8_t packet[HIDEKI_MAX_BYTES_PER_ROW];
     int sensortype, chk;
     int channel, rc, battery_ok;
@@ -57,28 +58,42 @@ static int hideki_ts04_callback(r_device *decoder, bitbuffer_t *bitbuffer)
 
     // Expect 8, 9, 10, or 14 unstuffed bytes
     int unstuffed_len = bitbuffer->bits_per_row[0] / 9;
-    if (unstuffed_len == 14)
-        sensortype = HIDEKI_WIND;
-    else if (unstuffed_len == 10)
+
+    //if (unstuffed_len == 14)
+      //  sensortype = HIDEKI_WIND;
+    //if (unstuffed_len == 10)
+      //  sensortype = HIDEKI_TS04;
+    if (unstuffed_len == 9)
         sensortype = HIDEKI_TS04;
-    else if (unstuffed_len == 9)
-        sensortype = HIDEKI_RAIN;
-    else if (unstuffed_len == 8)
-        sensortype = HIDEKI_TEMP;
+//    else if (unstuffed_len == 8)
+  //      sensortype = HIDEKI_TEMP;
     else
         return DECODE_ABORT_LENGTH;
 
     // Invert all bits
     bitbuffer_invert(bitbuffer);
 
+    unsigned char bits1 = 0, bits2 = 0;
+    int len = bitbuffer->bits_per_row[0];
+    for(int i = 0; i < len; ++i) {
+       bits2 = b[i] & 0x03;
+       b[i] >>= 2;
+       b[i] |= bits1 << 6;
+       bits1 = bits2;
+    }
+
+
     // Strip (unstuff) and check parity bit
     // TODO: refactor to util function
     for (int i = 0; i < unstuffed_len; ++i) {
         unsigned int offset = i / 8;
-        packet[i] = (b[i + offset] << (i % 8)) | (b[i + offset + 1] >> (8 - i % 8));
+        int ii = 0;
+        packet[i] = (b[ii+i + offset] << ((ii+i) % 8)) | (b[(ii+i) + offset + 1] >> (8 - (ii+i) % 8));
+
         // check parity
-        uint8_t parity = (b[i + offset + 1] >> (7 - i % 8)) & 1;
+        uint8_t parity = (b[(i -ii) + offset + 1] >> (7 - (i-ii) % 8)) & 1;
         if (parity != parity8(packet[i])) {
+        
             if (decoder->verbose)
                 fprintf(stderr, "%s: Parity error at %d\n", __func__, i);
             return DECODE_FAIL_MIC;
@@ -90,22 +105,24 @@ static int hideki_ts04_callback(r_device *decoder, bitbuffer_t *bitbuffer)
     if (chk) {
         if (decoder->verbose)
             fprintf(stderr, "%s: XOR error\n", __func__);
-        return DECODE_FAIL_MIC;
+//        return DECODE_FAIL_MIC;
+//        else
+//            printf("\nXOR ERROR\n");
     }
 
     // CRC-8 poly=0x07 init=0x00
     if (crc8(&packet[1], unstuffed_len - 1, 0x07, 0x00)) {
         if (decoder->verbose)
             fprintf(stderr, "%s: CRC error\n", __func__);
-        return DECODE_FAIL_MIC;
+//        return DECODE_FAIL_MIC;
     }
 
     // Reflect LSB first to LSB last
     reflect_bytes(packet, unstuffed_len);
 
     // Parse data
-    if (packet[0] != 0x9f) // NOTE: other valid ids might exist
-        return DECODE_FAIL_SANITY;
+//    if (packet[0] != 0x9f) // NOTE: other valid ids might exist
+//        return DECODE_FAIL_SANITY;
 
     int pkt_len  = (packet[2] >> 1) & 0x1f;
     //int pkt_seq  = packet[3] >> 6;
@@ -118,13 +135,16 @@ static int hideki_ts04_callback(r_device *decoder, bitbuffer_t *bitbuffer)
     if (pkt_len +3 != unstuffed_len) {
         if (decoder->verbose)
             fprintf(stderr, "%s: LEN error\n", __func__);
-        return DECODE_ABORT_LENGTH;
+//        return DECODE_ABORT_LENGTH;
     }
 
     channel = (packet[1] >> 5) & 0x0F;
     if (channel >= 5) channel -= 1;
     rc = packet[1] & 0x0F;
+    //temp = ((packet[5] & 0xF0) >> 4) * 100 + ((packet[4] & 0xF0) >> 4) * 10 + (packet[4] & 0x0F);
     temp = (packet[5] & 0x0F) * 100 + ((packet[4] & 0xF0) >> 4) * 10 + (packet[4] & 0x0F);
+//    temp = (packet[5] & 0x0F) * 100;
+//    printf("\nPACKET[5] : %d \n",packet[5]);
     if (((packet[5]>>7) & 1) == 0) {
         temp = -temp;
     }
